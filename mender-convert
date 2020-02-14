@@ -96,4 +96,5 @@ touch work/convert.log
 ./mender-convert-package "$@"
 
 echo "Output Artifacts and images can be found in the deploy directory:"
+pwd
 ls -1 deploy/*
