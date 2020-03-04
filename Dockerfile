@@ -32,6 +32,12 @@ RUN apt-get update && apt-get install -y \
 # for arm64 support
     gcc-aarch64-linux-gnu
 
+#Needed to handle S3
+RUN apt-get install apt-utils python-dev python-pip -y && \
+    apt-get clean && pip install --upgrade pip
+
+RUN pip install awscli
+
 # Disable sanity checks made by mtools. These checks reject copy/paste operations on converted disk images.
 RUN echo "mtools_skip_check=1" >> $HOME/.mtoolsrc
 
@@ -102,4 +108,31 @@ RUN chmod 0440 /etc/sudoers.d/secure_path_override
 WORKDIR /
 
 COPY docker-entrypoint.sh /usr/local/bin/
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+
+# we cant bind volumes on fargate, so we must add directories instead of binding
+ADD ./ /mender-convert/
+
+ENTRYPOINT \
+    #set acces keys
+    TENANT_TOKEN=$TENANT &&\
+    echo "Starting Mender Image Conversion by PED.Devops..." && \
+    #copy from s3 to disk
+    mkdir -p /mender-convert/input && \
+    mkdir -p /mender-convert/output && \
+    echo "Copying img from s3://${INPUT_BUCKET}/${INPUT_IMG} to .input/${INPUT_IMG}..." && \
+    aws s3 cp s3://${INPUT_BUCKET}/${INPUT_IMG} /mender-convert/input/${INPUT_IMG} && \
+    #convert
+    MENDER_ARTIFACT_NAME="${INPUT_IMG%.*}" && \
+    bash /usr/local/bin/docker-entrypoint.sh from-raw-disk-image  \
+        --raw-disk-image /mender-convert/input/${INPUT_IMG}  \
+        --storage-total-size-mb 10000                        \
+        --mender-disk-image ${MENDER_ARTIFACT_NAME}.sdimg    \
+        --device-type raspberrypi3                           \
+        --artifact-name $MENDER_ARTIFACT_NAME                       \
+        --bootloader-toolchain arm-buildroot-linux-gnueabihf \
+        --server-url "https://hosted.mender.io"              \
+        --tenant-token $TENANT_TOKEN && \
+    #copy back the converted img to s3
+    echo "Copying converted img to S3://${INPUT_BUCKET}/${OUTPUT_FILE} ..." && \
+    aws s3 cp /mender-convert/output/${INPUT_IMG%.*}.mender s3://${OUTPUT_BUCKET}/raspberrypi-${INPUT_IMG%.*}.mender && \
+    aws s3 cp /mender-convert/output/${INPUT_IMG%.*}.sdimg s3://${OUTPUT_BUCKET}/raspberrypi-${INPUT_IMG%.*}.sdimg
