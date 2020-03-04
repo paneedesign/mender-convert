@@ -84,7 +84,7 @@ ENTRYPOINT \
     aws s3 cp s3://${INPUT_BUCKET}/${INPUT_IMG} /mender-convert/input/${INPUT_IMG} && \
     #convert
     MENDER_ARTIFACT_NAME="${INPUT_IMG%.*}" && \
-    bash /usr/local/bin/docker-entrypoint.sh $MENDER_ARTIFACT_NAME --disk-image /mender-convert/input/${INPUT_IMG} --config configs/raspberrypi3_config --overlay rootfs_overlay_demo/ && \
+    bash /usr/local/bin/docker-entrypoint.sh $MENDER_ARTIFACT_NAME --disk-image /mender-convert/input/${INPUT_IMG} --config configs/raspberrypi4_config --overlay rootfs_overlay_demo/ && \
     #copy back the converted img to s3
     echo "Copying converted img to S3://${INPUT_BUCKET}/${OUTPUT_FILE} ..." && \
     aws s3 cp /mender-convert/deploy/raspberrypi-${INPUT_IMG%.*}.mender s3://${OUTPUT_BUCKET}/raspberrypi-${INPUT_IMG%.*}.mender
