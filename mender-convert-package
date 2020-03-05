@@ -19,6 +19,7 @@
 function platform_package() {
   true
 }
+PLATFORM_PACKAGE_HOOKS=(platform_package)
 
 function trap_exit() {
   echo "mender-convert-package has finished. Cleaning up..."
@@ -118,7 +119,7 @@ if [ ${actual_boot_size} -gt ${boot_part_sectors} ]; then
   log_warn "The allocated boot part size $(disk_sectors_to_mb ${boot_part_sectors}) MiB is too small."
   log_warn "The actual boot part size is $(disk_sectors_to_mb ${actual_boot_size}) MiB"
   log_warn "Will adjust MENDER_BOOT_PART_SIZE_MB automatically"
-  log_warn "Considered adjusting the configuration file to avoid this message"
+  log_warn "Consider adjusting the configuration file to avoid this message"
   boot_part_sectors=${actual_boot_size}
 fi
 
@@ -244,7 +245,10 @@ disk_write_at_offset "${output_dir}/rootfs.img" "${img_path}" "${rootfsb_start}"
 disk_write_at_offset "${output_dir}/data.img" "${img_path}" "${data_start}"
 
 log_info "Performing platform specific package operations (if any)"
-platform_package
+for hook in "${PLATFORM_PACKAGE_HOOKS[@]}"; do
+  log_info "Running hook: $hook"
+  eval $hook
+done
 
 # Create bmap index
 if [ "${MENDER_USE_BMAP}" == "y" ]; then
