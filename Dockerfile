@@ -45,6 +45,12 @@ RUN apt-get update && apt-get install -y \
 # needed to run pxz
     libgomp1
 
+#Needed to handle S3
+RUN apt-get install apt-utils python-dev python-pip -y && \
+    apt-get clean && pip install --upgrade pip
+
+RUN pip install awscli
+
 COPY --from=build /root/pxz/pxz /usr/bin/pxz
 
 # allow us to keep original PATH variables when sudoing
@@ -63,4 +69,22 @@ RUN wget -q -O /usr/bin/mender-artifact https://d1b0l86ne08fsf.cloudfront.net/me
 WORKDIR /
 
 COPY docker-entrypoint.sh /usr/local/bin/
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+
+# we cant bind volumes on fargate, so we must add directories instead of binding
+ADD ./ /mender-convert/
+
+ENTRYPOINT \
+    #set acces keys
+    AWS_ACCESS_KEY_ID='AKIATISB4SDT7HCD7LNR' && AWS_SECRET_ACCESS_KEY='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' &&\
+    echo "Starting Mender Image Conversion by PED.Devops..." && \
+    #copy from s3 to disk
+    mkdir -p /mender-convert/input && \
+    mkdir -p /mender-convert/output && \
+    echo "Copying img from s3://${INPUT_BUCKET}/${INPUT_IMG} to .input/${INPUT_IMG}..." && \
+    aws s3 cp s3://${INPUT_BUCKET}/${INPUT_IMG} /mender-convert/input/${INPUT_IMG} && \
+    #convert
+    MENDER_ARTIFACT_NAME="${INPUT_IMG%.*}" && \
+    bash /usr/local/bin/docker-entrypoint.sh $MENDER_ARTIFACT_NAME --disk-image /mender-convert/input/${INPUT_IMG} --config configs/raspberrypi4_config --config configs/pod_config --overlay rootfs_overlay_demo/ && \
+    #copy back the converted img to s3
+    echo "Copying converted img to S3://${INPUT_BUCKET}/${OUTPUT_FILE} ..." && \
+    aws s3 cp /mender-convert/deploy/raspberrypi-${INPUT_IMG%.*}.mender s3://${OUTPUT_BUCKET}/raspberrypi-${INPUT_IMG%.*}.mender
